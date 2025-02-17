@@ -9,9 +9,9 @@ CIDR_BLOCK=$(aws ec2 describe-vpcs \
     --filters "Name=tag:env,Values=lab" \
     --query "Vpcs[0].CidrBlock" --output text)
 
-echo "🔹 Đang tìm Private Subnets..."
+echo "🔹 Đang tìm Private Subnets theo VPC ID..."
 PRIVATE_SUBNET_IDS=$(aws ec2 describe-subnets \
-    --filters "Name=tag:env,Values=lab" "Name=map-public-ip-on-launch,Values=false" \
+    --filters "Name=vpc-id,Values=$VPC_ID" "Name=map-public-ip-on-launch,Values=false" \
     --query "Subnets[*].SubnetId" --output json | jq -r '. | join(",")')
 
 EKS_CONFIG_FILE="/tmp/eks-private-cluster.yaml"
