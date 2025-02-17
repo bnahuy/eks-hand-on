@@ -10,9 +10,15 @@ CIDR_BLOCK=$(aws ec2 describe-vpcs \
     --query "Vpcs[0].CidrBlock" --output text)
 
 echo "🔹 Đang tìm Private Subnets theo VPC ID..."
-PRIVATE_SUBNET_IDS=$(aws ec2 describe-subnets \
+PRIVATE_SUBNETS=$(aws ec2 describe-subnets \
     --filters "Name=vpc-id,Values=$VPC_ID" "Name=map-public-ip-on-launch,Values=false" \
-    --query "Subnets[*].SubnetId" --output json | jq -r '. | join(",")')
+    --query "Subnets[*].[SubnetId,AvailabilityZone]" --output json)
+
+# Lấy Subnet ID & AZ
+PRIVATE_SUBNET_1_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[0][0]')
+PRIVATE_SUBNET_1_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[0][1]')
+PRIVATE_SUBNET_2_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[1][0]')
+PRIVATE_SUBNET_2_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[1][1]')
 
 EKS_CONFIG_FILE="/tmp/eks-private-cluster.yaml"
 
@@ -31,10 +37,10 @@ vpc:
   cidr: "$CIDR_BLOCK"
   subnets:
     private:
-      us-east-1a:
-        id: "$(echo $PRIVATE_SUBNET_IDS | cut -d ',' -f1)"
-      us-east-1b:
-        id: "$(echo $PRIVATE_SUBNET_IDS | cut -d ',' -f2)"
+      $PRIVATE_SUBNET_1_AZ:
+        id: "$PRIVATE_SUBNET_1_ID"
+      $PRIVATE_SUBNET_2_AZ:
+        id: "$PRIVATE_SUBNET_2_ID"
 
 privateCluster:
   enabled: true  # EKS API Server chỉ Private
