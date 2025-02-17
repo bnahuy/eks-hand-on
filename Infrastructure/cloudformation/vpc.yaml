@@ -1,105 +1,198 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Tạo VPC với Subnets, Internet Gateway, Route Tables và Security Group'
+Description: 'Tạo VPC với Public/Private Subnet và NAT Gateway'
 
 Resources:
+  # Tạo VPC với CIDR 172.16.0.0/16
   MyVPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
+      CidrBlock: 172.16.0.0/16
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: MyCustomVPC
+          Value: LabVPC
+        - Key: env
+          Value: lab
 
-  PublicSubnet:
+  # Tạo Public Subnet 1
+  PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: 10.0.1.0/24
-      MapPublicIpOnLaunch: true
+      CidrBlock: 172.16.0.0/20
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: MyPublicSubnet
+          Value: PublicSubnet1
+        - Key: env
+          Value: lab
 
-  PrivateSubnet:
+  # Tạo Public Subnet 2
+  PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: 10.0.2.0/24
-      MapPublicIpOnLaunch: false
+      CidrBlock: 172.16.16.0/20
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: MyPrivateSubnet
+          Value: PublicSubnet2
+        - Key: env
+          Value: lab
 
+  # Tạo Private Subnet 1
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 172.16.32.0/20
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet1
+        - Key: env
+          Value: lab
+
+  # Tạo Private Subnet 2
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 172.16.48.0/20
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet2
+        - Key: env
+          Value: lab
+
+  # Tạo Internet Gateway
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: MyInternetGateway
+          Value: LabInternetGateway
+        - Key: env
+          Value: lab
 
-  AttachGateway:
+  # Gắn Internet Gateway vào VPC
+  AttachInternetGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref MyVPC
       InternetGatewayId: !Ref InternetGateway
 
+  # Tạo Elastic IP cho NAT Gateway
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: LabElasticIP
+        - Key: env
+          Value: lab
+
+  # Tạo NAT Gateway
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      Tags:
+        - Key: Name
+          Value: LabNATGateway
+        - Key: env
+          Value: lab
+
+  # Tạo Route Table cho Public Subnet
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref MyVPC
       Tags:
         - Key: Name
-          Value: MyPublicRouteTable
+          Value: PublicRouteTable
+        - Key: env
+          Value: lab
 
-  DefaultPublicRoute:
+  # Route 0.0.0.0/0 của Public Subnet đi qua Internet Gateway
+  PublicRoute:
     Type: AWS::EC2::Route
-    DependsOn: AttachGateway
     Properties:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  PublicRouteTableAssociation:
+  # Gắn Route Table Public vào Public Subnet 1
+  PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PublicSubnet
+      SubnetId: !Ref PublicSubnet1
       RouteTableId: !Ref PublicRouteTable
 
-  SecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  # Gắn Route Table Public vào Public Subnet 2
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      GroupDescription: "Allow SSH and HTTP"
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Tạo Route Table cho Private Subnet
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
       VpcId: !Ref MyVPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: MySecurityGroup
+          Value: PrivateRouteTable
+        - Key: env
+          Value: lab
+
+  # Route 0.0.0.0/0 của Private Subnet đi qua NAT Gateway
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  # Gắn Route Table Private vào Private Subnet 1
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Gắn Route Table Private vào Private Subnet 2
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
 
 Outputs:
   VPCId:
     Description: "VPC ID"
     Value: !Ref MyVPC
-  PublicSubnetId:
-    Description: "Public Subnet ID"
-    Value: !Ref PublicSubnet
-  PrivateSubnetId:
-    Description: "Private Subnet ID"
-    Value: !Ref PrivateSubnet
-  InternetGatewayId:
-    Description: "Internet Gateway ID"
-    Value: !Ref InternetGateway
-  SecurityGroupId:
-    Description: "Security Group ID"
-    Value: !Ref SecurityGroup
+  PublicSubnet1Id:
+    Description: "Public Subnet 1 ID"
+    Value: !Ref PublicSubnet1
+  PublicSubnet2Id:
+    Description: "Public Subnet 2 ID"
+    Value: !Ref PublicSubnet2
+  PrivateSubnet1Id:
+    Description: "Private Subnet 1 ID"
+    Value: !Ref PrivateSubnet1
+  PrivateSubnet2Id:
+    Description: "Private Subnet 2 ID"
+    Value: !Ref PrivateSubnet2
+  NATGatewayId:
+    Description: "NAT Gateway ID"
+    Value: !Ref NATGateway
