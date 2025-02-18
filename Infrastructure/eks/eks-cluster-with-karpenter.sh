@@ -121,7 +121,7 @@ managedNodeGroups:
     privateNetworking: true
     ssh:
       allow: true
-      publicKeyPath: ./aws_worker_node.pub
+      publicKeyPath: /home/cloudshell-user/myown.pub
       sourceSecurityGroupIds: ["$BASTION_SG_ID"]
 
 addons:
