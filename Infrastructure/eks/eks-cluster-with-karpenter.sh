@@ -40,6 +40,28 @@ PRIVATE_SUBNET_1_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[0][1]')
 PRIVATE_SUBNET_2_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[1][0]')
 PRIVATE_SUBNET_2_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[1][1]')
 
+echo "🔹 Đang tìm Security Group có tên 'bastion-host' hoặc có tag env=lab..."
+BASTION_SG_ID=$(aws ec2 describe-security-groups \
+    --filters "Name=vpc-id,Values=$VPC_ID" \
+              "Name=tag:env,Values=lab" \
+              "Name=group-name,Values=bastion-host" \
+    --query "SecurityGroups[0].GroupId" --output text)
+
+# Nếu không tìm thấy Security Group, thử tìm chỉ theo tag env=lab
+if [[ -z "$BASTION_SG_ID" ]]; then
+    echo "⚠️ Không tìm thấy Security Group có tên 'bastion-host', thử tìm theo tag env=lab..."
+    BASTION_SG_ID=$(aws ec2 describe-security-groups \
+        --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:env,Values=lab" \
+        --query "SecurityGroups[0].GroupId" --output text)
+fi
+
+if [[ -z "$BASTION_SG_ID" ]]; then
+    echo "❌ Không tìm thấy Security Group hợp lệ! Kiểm tra lại cấu hình."
+    exit 1
+fi
+
+echo "✅ Security Group ID của Bastion Host: $BASTION_SG_ID"
+
 EKS_CONFIG_FILE="/tmp/eks-private-cluster.yaml"
 
 echo "🔹 Tạo file cấu hình EKS tại $EKS_CONFIG_FILE..."
@@ -86,25 +108,21 @@ vpc:
 privateCluster:
   enabled: true  # EKS API Server chỉ Private
 
-nodeGroups:
-  - name: private-nodes
-    instanceType: t3a.medium
-    desiredCapacity: 2
-    minSize: 1
-    maxSize: 3
+managedNodeGroups:
+  - name: "${CLUSTER_NAME}-worker"
+    instanceType: t3.micro
     amiFamily: Bottlerocket
+    availabilityZones:
+      - "$PRIVATE_SUBNET_1A_AZ"
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 4
+    maxPodsPerNode: 17
     privateNetworking: true
-    volumeSize: 20
-    labels:
-      role: worker
-    tags:
-      env: lab
     ssh:
-      allow: false
-    iam:
-      withAddonPolicies:
-        autoScaler: true
-        cloudWatch: true
+      allow: true
+      publicKeyPath: ./aws_worker_node.pub
+      sourceSecurityGroupIds: ["$BASTION_SG_ID"]
 
 addons:
   - name: kube-proxy
