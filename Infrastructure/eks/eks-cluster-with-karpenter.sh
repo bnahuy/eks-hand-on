@@ -175,3 +175,36 @@ CLUSTER_ENDPOINT="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --query "c
 KARPENTER_IAM_ROLE_ARN="arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:role/${CLUSTER_NAME}-karpenter"
 
 echo "${CLUSTER_ENDPOINT} ${KARPENTER_IAM_ROLE_ARN}"
+
+# 🛡️ Verify Karpenter image trước khi cài đặt
+echo "🔹 Xác minh Karpenter image với Cosign..."
+cosign verify public.ecr.aws/karpenter/karpenter:${KARPENTER_VERSION} \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp='https://github\.com/aws/karpenter-provider-aws/\.github/workflows/release\.yaml@.+' \
+  --certificate-github-workflow-repository=aws/karpenter-provider-aws \
+  --certificate-github-workflow-name=Release \
+  --certificate-github-workflow-ref=refs/tags/v${KARPENTER_VERSION} \
+  --annotations version=${KARPENTER_VERSION} || { 
+    echo "❌ LỖI: Xác minh Karpenter image thất bại! Kiểm tra lại.";
+    exit 1;
+}
+
+echo "✅ Karpenter image đã được xác minh!"
+
+# 🚀 Cài đặt Karpenter bằng Helm
+echo "🔹 Cài đặt Karpenter với Helm..."
+helm registry logout public.ecr.aws  # Logout để đảm bảo tải về chính xác
+
+helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --version "${KARPENTER_VERSION}" --namespace "${KARPENTER_NAMESPACE}" --create-namespace \
+  --set "settings.clusterName=${CLUSTER_NAME}" \
+  --set "settings.interruptionQueue=${CLUSTER_NAME}" \
+  --set controller.resources.requests.cpu=1 \
+  --set controller.resources.requests.memory=1Gi \
+  --set controller.resources.limits.cpu=1 \
+  --set controller.resources.limits.memory=1Gi \
+  --wait || {
+    echo "❌ LỖI: Cài đặt Karpenter thất bại! Kiểm tra lại.";
+    exit 1;
+}
+
+echo "✅ Karpenter đã được cài đặt thành công trên cluster ${CLUSTER_NAME}!"
