@@ -40,6 +40,29 @@ PRIVATE_SUBNET_1_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[0][1]')
 PRIVATE_SUBNET_2_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[1][0]')
 PRIVATE_SUBNET_2_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[1][1]')
 
+# Lấy Subnet ID & AZ động, chỉ lấy "X-1a"
+PRIVATE_SUBNET_1A_ID=""
+PRIVATE_SUBNET_1A_AZ=""
+
+for row in $(echo "$PRIVATE_SUBNETS" | jq -c '.[]'); do
+    SUBNET_ID=$(echo "$row" | jq -r '.[0]')
+    AZ=$(echo "$row" | jq -r '.[1]')
+
+    if [[ "$AZ" =~ (us-east|ap-southeast|eu-central)-[0-9]+a$ ]]; then
+        PRIVATE_SUBNET_1A_ID="$SUBNET_ID"
+        PRIVATE_SUBNET_1A_AZ="$AZ"
+        break
+    fi
+done
+
+if [[ -z "$PRIVATE_SUBNET_1A_ID" ]]; then
+    echo "❌ Không tìm thấy Subnet trong AZ phù hợp (X-1a). Kiểm tra lại Subnets!"
+    exit 1
+fi
+
+echo "✅ Chọn AZ: $PRIVATE_SUBNET_1A_AZ (Subnet: $PRIVATE_SUBNET_1A_ID)"
+
+
 echo "🔹 Đang tìm Security Group có tên 'bastion-host' hoặc có tag env=lab..."
 BASTION_SG_ID=$(aws ec2 describe-security-groups \
     --filters "Name=vpc-id,Values=$VPC_ID" \
