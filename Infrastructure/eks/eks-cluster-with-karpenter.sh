@@ -113,8 +113,10 @@ vpc:
   cidr: "$CIDR_BLOCK"
   subnets:
     private:
-      $PRIVATE_SUBNET_1A_AZ:
-        id: "$PRIVATE_SUBNET_1A_ID"
+      $PRIVATE_SUBNET_1_AZ:
+        id: "$PRIVATE_SUBNET_1_ID"
+      $PRIVATE_SUBNET_2_AZ:
+        id: "$PRIVATE_SUBNET_2_ID"
 
 privateCluster:
   enabled: true  # EKS API Server chỉ Private
