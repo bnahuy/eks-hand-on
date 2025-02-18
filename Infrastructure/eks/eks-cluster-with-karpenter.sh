@@ -63,27 +63,29 @@ fi
 echo "✅ Chọn AZ: $PRIVATE_SUBNET_1A_AZ (Subnet: $PRIVATE_SUBNET_1A_ID)"
 
 
-echo "🔹 Đang tìm Security Group có tên 'bastion-host' hoặc có tag env=lab..."
+echo "🔹 Đang tìm Security Group 'bastion-host' hoặc có tag env=lab..."
+
+# Trước tiên, thử tìm theo tag env=lab
 BASTION_SG_ID=$(aws ec2 describe-security-groups \
-    --filters "Name=vpc-id,Values=$VPC_ID" \
-              "Name=tag:env,Values=lab" \
-              "Name=group-name,Values=bastion-host" \
+    --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:env,Values=lab" \
     --query "SecurityGroups[0].GroupId" --output text)
 
-# Nếu không tìm thấy Security Group, thử tìm chỉ theo tag env=lab
-if [[ -z "$BASTION_SG_ID" ]]; then
-    echo "⚠️ Không tìm thấy Security Group có tên 'bastion-host', thử tìm theo tag env=lab..."
+# Nếu không tìm thấy theo tag, thử tìm theo group-name
+if [[ -z "$BASTION_SG_ID" || "$BASTION_SG_ID" == "None" ]]; then
+    echo "⚠️ Không tìm thấy Security Group theo tag env=lab, thử tìm theo group-name..."
     BASTION_SG_ID=$(aws ec2 describe-security-groups \
-        --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:env,Values=lab" \
+        --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=bastion-host" \
         --query "SecurityGroups[0].GroupId" --output text)
 fi
 
-if [[ -z "$BASTION_SG_ID" ]]; then
-    echo "❌ Không tìm thấy Security Group hợp lệ! Kiểm tra lại cấu hình."
+# Nếu vẫn không tìm thấy, báo lỗi
+if [[ -z "$BASTION_SG_ID" || "$BASTION_SG_ID" == "None" ]]; then
+    echo "❌ Không tìm thấy Security Group hợp lệ! Kiểm tra lại tag hoặc tên Security Group."
     exit 1
 fi
 
 echo "✅ Security Group ID của Bastion Host: $BASTION_SG_ID"
+
 
 EKS_CONFIG_FILE="/tmp/eks-private-cluster.yaml"
 
