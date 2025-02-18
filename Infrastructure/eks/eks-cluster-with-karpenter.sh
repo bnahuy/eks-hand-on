@@ -31,13 +31,19 @@ PRIVATE_SUBNETS=$(aws ec2 describe-subnets \
     --filters "Name=vpc-id,Values=$VPC_ID" "Name=map-public-ip-on-launch,Values=false" \
     --query "Subnets[*].[SubnetId,AvailabilityZone]" --output json)
 
+# Lấy Subnet ID & AZ
+PRIVATE_SUBNET_1_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[0][0]')
+PRIVATE_SUBNET_1_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[0][1]')
+PRIVATE_SUBNET_2_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[1][0]')
+PRIVATE_SUBNET_2_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[1][1]')
+
 # Kiểm tra nếu không có subnet nào được tìm thấy
 if [[ -z "$PRIVATE_SUBNETS" || "$PRIVATE_SUBNETS" == "[]" ]]; then
     echo "❌ Không tìm thấy Private Subnet nào trong VPC: $VPC_ID. Kiểm tra lại!"
     exit 1
 fi
 
-# Lấy Subnet ID & AZ động, chỉ lấy "X-1a"
+# Lấy Subnet ID & AZ động, chỉ lấy AZ kết thúc bằng "a"
 PRIVATE_SUBNET_1A_ID=""
 PRIVATE_SUBNET_1A_AZ=""
 
@@ -45,18 +51,22 @@ for row in $(echo "$PRIVATE_SUBNETS" | jq -c '.[]'); do
     SUBNET_ID=$(echo "$row" | jq -r '.[0]')
     AZ=$(echo "$row" | jq -r '.[1]')
 
-    if [[ "$AZ" =~ (us-east|ap-southeast|eu-central)-[0-9]+a$ ]]; then
+    # Kiểm tra nếu AZ kết thúc bằng "a"
+    if echo "$AZ" | grep -Eq "[a]$"; then
         PRIVATE_SUBNET_1A_ID="$SUBNET_ID"
         PRIVATE_SUBNET_1A_AZ="$AZ"
         break
     fi
 done
 
-if [[ -z "$PRIVATE_SUBNET_1A_ID" || "$PRIVATE_SUBNET_1A_ID" == "None" ]]; then
-    echo "❌ Không tìm thấy Private Subnet trong AZ phù hợp (X-1a). Kiểm tra lại Subnets!"
+# Kiểm tra nếu không tìm thấy AZ nào kết thúc bằng "a"
+if [[ -z "$PRIVATE_SUBNET_1A_ID" ]]; then
+    echo "❌ LỖI: Không tìm thấy Private Subnet trong AZ kết thúc bằng 'a'. Kiểm tra lại Subnets!"
     exit 1
 fi
+
 echo "✅ Chọn AZ: $PRIVATE_SUBNET_1A_AZ (Subnet: $PRIVATE_SUBNET_1A_ID)"
+
 
 echo "🔹 Đang tìm Security Group 'bastion-host' hoặc có tag env=lab..."
 BASTION_SG_ID=$(aws ec2 describe-security-groups \
