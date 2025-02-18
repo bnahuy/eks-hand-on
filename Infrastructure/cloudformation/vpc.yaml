@@ -176,7 +176,24 @@ Resources:
     Properties:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
-
+  
+  # Security Group cho Bastion Host
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group cho Bastion Host"
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0  # Chỉnh lại nếu chỉ muốn SSH từ IP nhất định
+      Tags:
+        - Key: Name
+          Value: bastion-host
+        - Key: env
+          Value: lab
+          
 Outputs:
   VPCId:
     Description: "VPC ID"
@@ -196,3 +213,6 @@ Outputs:
   NATGatewayId:
     Description: "NAT Gateway ID"
     Value: !Ref NATGateway
+  BastionSecurityGroupId:
+    Description: "Bastion Security Group ID"
+    Value: !Ref BastionSecurityGroup
