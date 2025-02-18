@@ -145,8 +145,12 @@ EOF
 
 echo "✅ File cấu hình EKS đã được tạo tại: $EKS_CONFIG_FILE"
 echo "🚀 Bắt đầu triển khai Private EKS Cluster..."
-eksctl create cluster -f "$EKS_CONFIG_FILE"
-echo "✅ EKS Private Cluster đã được triển khai thành công!"
+if eksctl create cluster -f "$EKS_CONFIG_FILE"; then
+    echo "✅ EKS Private Cluster đã được triển khai thành công!"
+else
+    echo "❌ LỖI: Tạo cluster thất bại! Kiểm tra lại log lỗi bên trên."
+    exit 1
+fi
 
 CLUSTER_ENDPOINT="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --query "cluster.endpoint" --output text)"
 KARPENTER_IAM_ROLE_ARN="arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:role/${CLUSTER_NAME}-karpenter"
