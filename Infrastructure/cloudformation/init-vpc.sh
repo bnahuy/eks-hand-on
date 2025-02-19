@@ -156,6 +156,7 @@ USER_DATA=$(base64 -w 0 <<EOF
 #!/bin/bash
 sudo yum update -y
 sudo yum install -y git
+sudo su -
 cd /root
 git clone https://github.com/bnahuy/eks-hand-on.git
 sh /root/eks-hand-on/prepare-tools/prepare.sh
