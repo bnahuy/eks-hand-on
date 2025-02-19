@@ -9,7 +9,7 @@ KEY_NAME="bastion-key"
 KEY_PATH="/home/cloudshell-user/acg.pem"  # Sử dụng file .pem luôn
 
 # Nhận instance type từ tham số đầu vào (nếu có), nếu không thì mặc định là t3a.large
-INSTANCE_TYPE=${1:-t3a.large}
+INSTANCE_TYPE=${1:-t2.small}
 
 echo "🚀 Bắt đầu tạo VPC Stack: $STACK_NAME..."
 aws cloudformation create-stack --stack-name "$STACK_NAME" \
