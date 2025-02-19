@@ -100,7 +100,7 @@ for row in $(echo "$PUBLIC_SUBNETS" | jq -c '.[]'); do
 
     # Kiểm tra nếu AZ kết thúc bằng "a"
     if echo "$AZ" | grep -Eq "[a]$"; then
-        PUBLIC_UBNET_1A_ID="$SUBNET_ID"
+        PUBLIC_SUBNET_1A_ID="$SUBNET_ID"
         PUBLIC_SUBNET_1A_AZ="$AZ"
         break
     fi
