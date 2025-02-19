@@ -8,6 +8,9 @@ BASTION_NAME="BastionHost"
 KEY_NAME="bastion-key"
 KEY_PATH="/home/cloudshell-user/acg.pem"  # Sử dụng file .pem luôn
 
+# Nhận instance type từ tham số đầu vào (nếu có), nếu không thì mặc định là t3a.large
+INSTANCE_TYPE=${1:-t3a.large}
+
 echo "🚀 Bắt đầu tạo VPC Stack: $STACK_NAME..."
 aws cloudformation create-stack --stack-name "$STACK_NAME" \
     --template-body "file://$TEMPLATE_FILE" \
@@ -73,18 +76,12 @@ if [[ -z "$VPC_ID" || "$VPC_ID" == "None" ]]; then
 fi
 echo "✅ VPC tìm thấy: $VPC_ID (CIDR: $CIDR_BLOCK)"
 
-echo "🔹 Đang tìm Private Subnets theo VPC ID..."
+echo "🔹 Đang tìm Public Subnets theo VPC ID..."
 PUBLIC_SUBNETS=$(aws ec2 describe-subnets \
     --filters "Name=vpc-id,Values=$VPC_ID" "Name=map-public-ip-on-launch,Values=true" \
     --query "Subnets[*].[SubnetId,AvailabilityZone]" --output json)
 
-# Lấy Subnet ID & AZ
-PUBLIC_SUBNET_1_ID=$(echo $PUBLIC_SUBNETS | jq -r '.[0][0]')
-PUBLIC_SUBNET_1_AZ=$(echo $PUBLIC_SUBNETS | jq -r '.[0][1]')
-PUBLIC_SUBNET_2_ID=$(echo $PUBLIC_SUBNETS | jq -r '.[1][0]')
-PUBLIC_SUBNET_2_AZ=$(echo $PUBLIC_SUBNETS | jq -r '.[1][1]')
-
-# Kiểm tra nếu không có subnet nào được tìm thấy
+# Kiểm tra nếu không có Public Subnet nào được tìm thấy
 if [[ -z "$PUBLIC_SUBNETS" || "$PUBLIC_SUBNETS" == "[]" ]]; then
     echo "❌ Không tìm thấy Public Subnet nào trong VPC: $VPC_ID. Kiểm tra lại!"
     exit 1
@@ -155,10 +152,10 @@ fi
 echo "✅ AMI ID: $AMI_ID"
 
 # 🔹 Tạo Bastion Host
-echo "🚀 Tạo Bastion Host..."
+echo "🚀 Tạo Bastion Host với instance type: $INSTANCE_TYPE ..."
 INSTANCE_ID=$(aws ec2 run-instances \
     --image-id "$AMI_ID" \
-    --instance-type "t3a.large" \
+    --instance-type "$INSTANCE_TYPE" \
     --key-name "$KEY_NAME" \
     --security-group-ids "$BASTION_SG_ID" \
     --subnet-id "$PUBLIC_SUBNET_1A_ID" \
@@ -166,22 +163,11 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=BastionHost},{Key=env,Value=lab}]" \
     --query "Instances[0].InstanceId" --output text)
 
-if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-    echo "❌ Không thể tạo Bastion Host. Kiểm tra lại!"
-    exit 1
-fi
 echo "✅ Bastion Host Instance ID: $INSTANCE_ID"
 
 # 🔹 Lấy Public IP của Bastion Host
-echo "⏳ Đang đợi Bastion Host khởi động..."
 aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
-
 BASTION_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
-if [[ -z "$BASTION_IP" || "$BASTION_IP" == "None" ]]; then
-    echo "❌ Không tìm thấy Public IP của Bastion Host. Kiểm tra lại!"
-    exit 1
-fi
-echo "✅ Bastion Host có Public IP: $BASTION_IP"
 
-echo "🎉 Hoàn thành! Bạn có thể SSH vào Bastion Host bằng lệnh sau:"
+echo "✅ Bastion Host có Public IP: $BASTION_IP"
 echo "ssh -i $KEY_PATH ec2-user@$BASTION_IP"
