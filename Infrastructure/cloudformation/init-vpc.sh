@@ -151,6 +151,17 @@ if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
 fi
 echo "✅ AMI ID: $AMI_ID"
 
+# 🔹 User Data Script để setup Bastion Host
+USER_DATA=$(base64 -w 0 <<EOF
+#!/bin/bash
+sudo yum update -y
+sudo yum install -y git
+cd /root
+git clone https://github.com/bnahuy/eks-hand-on.git
+sh /root/eks-hand-on/prepare-tools/prepare.sh
+EOF
+)
+
 # 🔹 Tạo Bastion Host
 echo "🚀 Tạo Bastion Host với instance type: $INSTANCE_TYPE ..."
 INSTANCE_ID=$(aws ec2 run-instances \
@@ -159,6 +170,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --key-name "$KEY_NAME" \
     --security-group-ids "$BASTION_SG_ID" \
     --subnet-id "$PUBLIC_SUBNET_1A_ID" \
+    --user-data "$USER_DATA" \
     --associate-public-ip-address \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=BastionHost},{Key=env,Value=lab}]" \
     --query "Instances[0].InstanceId" --output text)
