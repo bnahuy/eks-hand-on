@@ -1,77 +1,33 @@
 #!/bin/bash
 
-echo "🔹 Đang tìm VPC có tag env=lab..."
-VPC_ID=$(aws ec2 describe-vpcs \
-    --filters "Name=tag:env,Values=lab" \
-    --query "Vpcs[0].VpcId" --output text)
+KARPENTER_NAMESPACE="kube-system"
+KARPENTER_VERSION="1.2.1"
+K8S_VERSION="1.32"
 
-CIDR_BLOCK=$(aws ec2 describe-vpcs \
-    --filters "Name=tag:env,Values=lab" \
-    --query "Vpcs[0].CidrBlock" --output text)
+AWS_PARTITION="aws"
+CLUSTER_NAME="lab-eks-cluster"
+AWS_DEFAULT_REGION="us-east-1"
+AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+TEMPOUT="$(mktemp)"
 
-echo "🔹 Đang tìm Private Subnets theo VPC ID..."
-PRIVATE_SUBNETS=$(aws ec2 describe-subnets \
-    --filters "Name=vpc-id,Values=$VPC_ID" "Name=map-public-ip-on-launch,Values=false" \
-    --query "Subnets[*].[SubnetId,AvailabilityZone]" --output json)
+echo "${KARPENTER_NAMESPACE}" "${KARPENTER_VERSION}" "${K8S_VERSION}" "${CLUSTER_NAME}" "${AWS_DEFAULT_REGION}" "${AWS_ACCOUNT_ID}" "${TEMPOUT}" "${ARM_AMI_ID}" "${AMD_AMI_ID}" "${GPU_AMI_ID}"
 
-# Lấy Subnet ID & AZ
-PRIVATE_SUBNET_1_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[0][0]')
-PRIVATE_SUBNET_1_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[0][1]')
-PRIVATE_SUBNET_2_ID=$(echo $PRIVATE_SUBNETS | jq -r '.[1][0]')
-PRIVATE_SUBNET_2_AZ=$(echo $PRIVATE_SUBNETS | jq -r '.[1][1]')
+CLUSTER_ENDPOINT="$(aws eks describe-cluster --name "${CLUSTER_NAME}" --query "cluster.endpoint" --output text)"
 
-EKS_CONFIG_FILE="/tmp/eks-private-cluster.yaml"
+# 🚀 Cài đặt Karpenter bằng Helm
+echo "🔹 Cài đặt Karpenter với Helm..."
+helm registry logout public.ecr.aws  # Logout để đảm bảo tải về chính xác
 
-echo "🔹 Tạo file cấu hình EKS tại $EKS_CONFIG_FILE..."
-cat <<EOF > "$EKS_CONFIG_FILE"
-apiVersion: eksctl.io/v1alpha5
-kind: ClusterConfig
+helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --version "${KARPENTER_VERSION}" --namespace "${KARPENTER_NAMESPACE}" --create-namespace \
+  --set "settings.clusterName=${CLUSTER_NAME}" \
+  --set "settings.interruptionQueue=${CLUSTER_NAME}" \
+  --set controller.resources.requests.cpu=1 \
+  --set controller.resources.requests.memory=1Gi \
+  --set controller.resources.limits.cpu=1 \
+  --set controller.resources.limits.memory=1Gi \
+  --wait || {
+    echo "❌ LỖI: Cài đặt Karpenter thất bại! Kiểm tra lại.";
+    exit 1;
+}
 
-metadata:
-  name: lab-eks-cluster
-  region: us-east-1
-  version: "1.29"
-
-vpc:
-  id: "$VPC_ID"
-  cidr: "$CIDR_BLOCK"
-  subnets:
-    private:
-      $PRIVATE_SUBNET_1_AZ:
-        id: "$PRIVATE_SUBNET_1_ID"
-      $PRIVATE_SUBNET_2_AZ:
-        id: "$PRIVATE_SUBNET_2_ID"
-
-privateCluster:
-  enabled: true  # EKS API Server chỉ Private
-
-nodeGroups:
-  - name: private-nodes
-    instanceType: t3a.medium
-    desiredCapacity: 2
-    minSize: 1
-    maxSize: 3
-    amiFamily: Bottlerocket
-    privateNetworking: true
-    volumeSize: 20
-    labels:
-      role: worker
-    tags:
-      env: lab
-    ssh:
-      allow: false
-    iam:
-      withAddonPolicies:
-        autoScaler: true
-        cloudWatch: true
-
-addons:
-  - name: kube-proxy
-  - name: coredns
-  - name: eks-pod-identity-agent
-EOF
-
-echo "✅ File cấu hình EKS đã được tạo tại: $EKS_CONFIG_FILE"
-echo "🚀 Bắt đầu triển khai Private EKS Cluster..."
-eksctl create cluster -f "$EKS_CONFIG_FILE"
-echo "✅ EKS Private Cluster đã được triển khai thành công!"
+echo "✅ Karpenter đã được cài đặt thành công trên cluster ${CLUSTER_NAME}!"
