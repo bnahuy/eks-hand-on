@@ -11,6 +11,6 @@ AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 TEMPOUT="$(mktemp)"
 ARCHITECTURE="arm64"
 
-BOTTLEROCKET_AMI=aws ssm get-parameter --name /aws/service/bottlerocket/aws-k8s-${K8S_VERSION}/${ARCHITECTURE}/latest/image_id --region ${AWS_DEFAULT_REGION} --query "Parameter.Value" --output text
+BOTTLEROCKET_AMI="$(aws ssm get-parameter --name /aws/service/bottlerocket/aws-k8s-${K8S_VERSION}/${ARCHITECTURE}/latest/image_id --region ${AWS_DEFAULT_REGION} --query "Parameter.Value" --output text)"
 
-echo ${AWS_ACCOUNT_ID}
+echo ${BOTTLEROCKET_AMI}
